@@ -1,0 +1,1110 @@
+﻿using System;
+using MySql.Data.MySqlClient;
+using System.Collections.Generic;
+
+namespace Velomax_Core
+{
+    class Program
+    {
+        private static MySqlConnection connexion = null;
+
+        static Program()
+        {
+            try
+            {
+                string ipHome = "192.168.1.15";
+                string ipSchool = "10.1.175.170";
+                string mysqlinfo = $"SERVER={ipHome};PORT=3306;DATABASE=velomax;UID=velomax;PASSWORD=password";
+                connexion = new MySqlConnection(mysqlinfo);
+                connexion.Open();
+                Console.WriteLine("> Connecté à la base de donnée");
+            }
+            catch (Exception e)
+            {
+                Console.WriteLine("> Erreur connexion : " + e.ToString());
+            }
+        }
+
+        static string ToString<T>(List<T> liste)
+        {
+            string r = "";
+            for(int i = 0; i < liste.Count; i++)
+            {
+                r += liste[i] + " ";
+            }
+            return r;
+        }
+
+        static void Main(string[] args)
+        {
+            //CreerClientParticulier("Cluet", "Arthur", "arthur.cluet@edu.devinci.fr", "0647642460", "21 Allee Jean Moulin", "Carrières sous Poissy", "78955", "Ile de France");
+            //CreerClientParticulier("Cournil", "Arnaud", "arnaud.cournil@edu.devinci.fr", "0612345678", "12 Rue de la Paix", "Paris", "75001", "Ile de France");
+            //CreerClientParticulier("De Chantérac", "Arthur", "arthur.de_chanterac@edu.devinci.fr", "0798765412", "5 Avenue Foch", "Paris", "75001", "Ile de France") ;
+            CreerCommande(1, new int[] { 101, 102, 102, 104 }, new string[] { "C32", "C32", "DR23" });
+            //CreerCommande(1, new int[] { 110, 111, 111 }, new string[] { });
+            //Console.ReadKey();
+            //SupprimerCommande(1);
+
+            GetAssemblage(101);
+
+            connexion.Close();
+            Console.WriteLine("> Fin d'exécution");
+        }
+
+        static int CreerAdresse(string voie, string ville, string cp, string province)
+        {
+            string req = "INSERT INTO adresse(id, voie, ville, code_postal, province) VALUES (NULL, @voie, @ville, @cp, @province)";
+            MySqlCommand command = connexion.CreateCommand();
+            command.CommandText = req;
+            command.Parameters.AddWithValue("@voie", voie);
+            command.Parameters.AddWithValue("@ville", ville);
+            command.Parameters.AddWithValue("@cp", cp);
+            command.Parameters.AddWithValue("@province", province);
+            try
+            {
+                command.ExecuteNonQuery();
+                // Adresse crée
+            }
+            catch
+            {
+                //Console.WriteLine("Une erreur est survenue");
+                return -1; // adresse non créée
+            }
+
+            // On récupère l'ID de l'adresse crée
+            try
+            {
+                MySqlCommand command2 = connexion.CreateCommand();
+                command2.CommandText = "SELECT LAST_INSERT_ID();";
+                int result = Convert.ToInt32(command2.ExecuteScalar());
+                return result;
+            }
+            catch
+            {
+                return -1;
+            }
+        }
+
+        static bool SupprimerAdresse(int id)
+        {
+            string query = "DELETE FROM adresse WHERE id = @id";
+            MySqlCommand command = connexion.CreateCommand();
+            command.CommandText = query;
+            command.Parameters.AddWithValue("@id", id);
+            try
+            {
+                int i = command.ExecuteNonQuery();
+                return (i == 1);
+            } catch
+            {
+                return false;
+            }
+        }
+
+        static bool CreerFournisseur(string siret, string nom, int libelle, string nom_contact, string prenom_contact, int IDadresse)
+        {
+            string req = "INSERT INTO fournisseur(siret, nom, adresse, libelle, nom_contact, prenom_contact) VALUES (@siret, @nom, @adresse, @libelle, @nomc, @prenomc)";
+            MySqlCommand command = connexion.CreateCommand();
+            command.CommandText = req;
+            command.Parameters.AddWithValue("@siret", siret);
+            command.Parameters.AddWithValue("@nom", nom);
+            command.Parameters.AddWithValue("@adresse", IDadresse);
+            command.Parameters.AddWithValue("@libelle", libelle);
+            command.Parameters.AddWithValue("@nomc", nom_contact);
+            command.Parameters.AddWithValue("@prenomc", prenom_contact);
+            try
+            {
+                int count = command.ExecuteNonQuery();
+                return (count == 1);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static bool CreerFournisseur(string siret, string nom, int libelle, string nom_contact, string prenom_contact, string voie, string ville, string cp, string province)
+        {
+            // Si une erreur survient lors de la création de l'adresse on créé pas de fournisseur
+            int IDadresse = CreerAdresse(voie, ville, cp, province);
+            if (IDadresse < 0) return false;
+
+            string req = "INSERT INTO fournisseur(siret, nom, adresse, libelle, nom_contact, prenom_contact) VALUES (@siret, @nom, @adresse, @libelle, @nomc, @prenomc)";
+            MySqlCommand command = connexion.CreateCommand();
+            command.CommandText = req;
+            command.Parameters.AddWithValue("@siret", siret);
+            command.Parameters.AddWithValue("@nom", nom);
+            command.Parameters.AddWithValue("@adresse", IDadresse);
+            command.Parameters.AddWithValue("@libelle", libelle);
+            command.Parameters.AddWithValue("@nomc", nom_contact);
+            command.Parameters.AddWithValue("@prenomc", prenom_contact);
+            try
+            {
+                int count = command.ExecuteNonQuery();
+                return (count == 1);
+            }
+            catch (MySqlException e)
+            {
+                Console.WriteLine("Une erreur est survenue");
+                return false;
+            }
+
+        }
+
+        static bool SupprimerFournisseur(string siret)
+        {
+            string requete = "DELETE FROM fournisseur WHERE siret = @siret;";
+            MySqlCommand commande = connexion.CreateCommand();
+            commande.CommandText = requete;
+            commande.Parameters.AddWithValue("@siret", siret);
+            try
+            {
+                int rowsAffected = commande.ExecuteNonQuery();
+                return rowsAffected == 1;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static bool SupprimerPiece(string id)
+        {
+            string requete = "DELETE FROM piece WHERE id = @id;";
+            MySqlCommand commande = connexion.CreateCommand();
+            commande.CommandText = requete;
+            commande.Parameters.AddWithValue("@id", id);
+            try
+            {
+                int rowsAffected = commande.ExecuteNonQuery();
+                return rowsAffected == 1;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static string CreerPiece(string id, string description, string fournisseur, int numCatalogue, float prix, DateTime introduction, DateTime discontinuation, int delaiApprovisionnement)
+        {
+            // SELECT COUNT(siret) FROM fournisseur WHERE siret = "30613890001294"; on vérifie que le fournisseur existe
+
+            string chReq = "SELECT COUNT(siret) FROM fournisseur WHERE siret = @siret";
+            MySqlCommand selectCommand = connexion.CreateCommand();
+            selectCommand.CommandText = chReq;
+            selectCommand.Parameters.AddWithValue("@siret", fournisseur);
+            int count;
+            try
+            {
+                count = Convert.ToInt32(selectCommand.ExecuteScalar());
+                //Console.WriteLine($"count : {count}");
+            }
+            catch (Exception)
+            {
+                Console.WriteLine("Une erreur est survenue");
+                count = 0;
+            }
+
+            // On vérifie que le fournisseur existe
+            if (count == 1)
+            {
+                MySqlCommand insertCommand = connexion.CreateCommand();
+                insertCommand.CommandText = "INSERT INTO piece(id, details, fournisseur, numcatalogue, prix, date_introduction, date_discontinuation, delai_approvisionnement) VALUES (@id, @details, @fournisseur, @numcatalogue, @prix, @introduction, @discontinuation, @delai); ";
+                insertCommand.Parameters.AddWithValue("@id", id);
+                insertCommand.Parameters.AddWithValue("@details", description);
+                insertCommand.Parameters.AddWithValue("@fournisseur", fournisseur);
+                insertCommand.Parameters.AddWithValue("@numcatalogue", numCatalogue);
+                insertCommand.Parameters.AddWithValue("@prix", prix);
+                insertCommand.Parameters.AddWithValue("@introduction", introduction.ToString("u").Substring(0, 10));
+                insertCommand.Parameters.AddWithValue("@discontinuation", discontinuation.ToString("u").Substring(0, 10));
+                insertCommand.Parameters.AddWithValue("@delai", delaiApprovisionnement);
+                try
+                {
+                    insertCommand.ExecuteNonQuery();
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine("Une erreur est survenue");
+                    
+                }
+                return "";
+            }
+            else
+            {
+                return "";
+            }
+
+        }
+
+        static void ModifierPiece(string id, string newId = null, string details = null, string fournisseur = null, int numCatalogue = -1, int prix = -1, DateTime introduction = default, DateTime discontinuation = default, int delai = -1)
+        {
+            string query = "UPDATE piece SET ";
+            List<string> parametres = new List<string>();
+            if (newId != null)
+                parametres.Add("id = @newId");
+            if (details != null)
+                parametres.Add("details = @details");
+            if (fournisseur != null)
+                parametres.Add("fournisseur = @fournisseur");
+            if (numCatalogue >= 0)
+                parametres.Add("numcatalogue = @numcatalogue");
+            if (prix >= 0)
+                parametres.Add("prix = @prix");
+            if (introduction != default)
+                parametres.Add("date_introduction = @introduction");
+            if (discontinuation != default)
+                parametres.Add("date_discontinuation = @discontinuation");
+            if (delai >= 0)
+                parametres.Add("delai_approvisionnement = @delai");
+
+            if (parametres.Count == 0)
+            {
+                return;
+            }
+
+            query += String.Join(", ", parametres);
+            query += " WHERE id = @id";
+
+            MySqlCommand commande = connexion.CreateCommand();
+            commande.CommandText = query;
+
+            if (newId != null)
+                commande.Parameters.AddWithValue("@newId", newId);
+            if (details != null)
+                commande.Parameters.AddWithValue("@details", details);
+            if (fournisseur != null)
+                commande.Parameters.AddWithValue("@fournisseur", fournisseur);
+            if (numCatalogue >= 0)
+                commande.Parameters.AddWithValue("@numcatalogue", numCatalogue);
+            if (prix >= 0)
+                commande.Parameters.AddWithValue("@prix", prix);
+            if (introduction != default)
+                commande.Parameters.AddWithValue("@introduction", introduction.ToString("u").Substring(0, 10));
+            if (discontinuation != default)
+                commande.Parameters.AddWithValue("@discontinuation", discontinuation.ToString("u").Substring(0, 10));
+            if (delai >= 0)
+                commande.Parameters.AddWithValue("@delai", delai);
+
+            /*Console.WriteLine(commande.CommandText);
+            for (int i = 0; i < commande.Parameters.Count; i++)
+            {
+                Console.WriteLine($"{commande.Parameters[i]}");
+            }*/
+
+            commande.Parameters.AddWithValue("@id", id);
+
+            try
+            {
+                commande.ExecuteNonQuery();
+                //Console.WriteLine("piece mise a jour");
+            }
+            catch (Exception e)
+            {
+                //Console.WriteLine(e.Message);
+            }
+
+        }
+
+        static bool CreerBicyclette(int id, int idAssemblage, string nom, int grandeur, float prix, string ligneProduit)
+        {
+            string query = "INSERT INTO bicyclette(id, id_assemblage, nom, grandeur, prix, ligne_produit) VALUES (@id, @assemblage, @nom, @grandeur, @prix, @ligne)";
+            MySqlCommand command = connexion.CreateCommand();
+            command.CommandText = query;
+            command.Parameters.AddWithValue("@id", id);
+            command.Parameters.AddWithValue("@assemblage", idAssemblage);
+            command.Parameters.AddWithValue("@nom", nom);
+            command.Parameters.AddWithValue("@grandeur", grandeur);
+            command.Parameters.AddWithValue("@prix", prix);
+            command.Parameters.AddWithValue("@ligne", ligneProduit);
+
+            try {
+                int i = command.ExecuteNonQuery();
+                return i == 1;
+            } catch (Exception e)
+            {
+                return false;
+            }
+        }
+
+        static bool SupprimerBicyclette(int id)
+        {
+            string requete = "DELETE FROM bicyclette WHERE id = @id;";
+            MySqlCommand commande = connexion.CreateCommand();
+            commande.CommandText = requete;
+            commande.Parameters.AddWithValue("@id", id);
+            try
+            {
+                int rowsAffected = commande.ExecuteNonQuery();
+                return rowsAffected == 1;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static void ModifierBicyclette(int id, int newId = -1, int assemblage = -1, string nom = null, int grandeur = -1, float prix = -1, string ligneProduit = null)
+        {
+            string query = "UPDATE bicyclette SET ";
+            List<string> parametres = new List<string>();
+            if (newId >= 0)
+                parametres.Add("id = @newId");
+            if (assemblage >= 0)
+                parametres.Add("id_assemblage = @assemblage");
+            if (grandeur >= 0)
+                parametres.Add("grandeur = @grandeur");
+            if (prix >= 0)
+                parametres.Add("prix = @prix");
+            if (nom != null)
+                parametres.Add("nom = @nom");
+            if (ligneProduit != null)
+                parametres.Add("ligne_produit = @ligne");
+
+            if (parametres.Count == 0)
+            {
+                return;
+            }
+
+            query += String.Join(", ", parametres);
+            query += " WHERE id = @id";
+
+            MySqlCommand commande = connexion.CreateCommand();
+            commande.CommandText = query;
+
+            if (newId >= 0)
+                commande.Parameters.AddWithValue("@newId", newId);
+            if (assemblage >= 0)
+                commande.Parameters.AddWithValue("@assemblage", assemblage);
+            if (grandeur >= 0)
+                commande.Parameters.AddWithValue("@grandeur", grandeur);
+            if (prix >= 0)
+                commande.Parameters.AddWithValue("@prix", prix);
+            if (nom != null)
+                commande.Parameters.AddWithValue("@nom", nom);
+            if (ligneProduit != null)
+                commande.Parameters.AddWithValue("@ligne", ligneProduit);
+
+            /*Console.WriteLine(commande.CommandText);
+            for (int i = 0; i < commande.Parameters.Count; i++)
+            {
+                Console.WriteLine($"{commande.Parameters[i]}");
+            }*/
+
+            commande.Parameters.AddWithValue("@id", id);
+
+            try
+            {
+                commande.ExecuteNonQuery();
+                //Console.WriteLine("piece mise a jour");
+            }
+            catch (Exception e)
+            {
+                //Console.WriteLine(e.Message);
+            }
+        }
+
+        static bool CreerAssemblage(int id, string cadre = null, string guidon = null, string freins = null, string selle = null, string derailleur_avant = null, string derailleur_arriere = null, string roue_avant = null, string roue_arriere = null, string reflecteurs = null, string pedalier = null, string ordinateur = null, string panier = null)
+        {
+            string query = "INSERT INTO assemblage (id, cadre, guidon, freins, selle, derailleur_avant, derailleur_arriere, roue_avant, roue_arriere, reflecteurs, pedalier, ordinateur, panier) VALUES (@id, @cadre, @guidon, @freins, @selle, @da, @dv, @ra, @rv, @reflecteurs, @pedalier, @ordinateur, @panier);";
+
+            MySqlCommand command = connexion.CreateCommand();
+            command.CommandText = query;
+
+            command.Parameters.AddWithValue("@id", id);
+            command.Parameters.AddWithValue("@cadre", cadre);
+            command.Parameters.AddWithValue("@guidon", guidon);
+            command.Parameters.AddWithValue("@freins", freins);
+            command.Parameters.AddWithValue("@selle", selle);
+            command.Parameters.AddWithValue("@da", derailleur_avant);
+            command.Parameters.AddWithValue("@dv", derailleur_arriere);
+            command.Parameters.AddWithValue("@ra", roue_avant);
+            command.Parameters.AddWithValue("@rv", roue_arriere);
+            command.Parameters.AddWithValue("@reflecteurs", reflecteurs);
+            command.Parameters.AddWithValue("@pedalier", pedalier);
+            command.Parameters.AddWithValue("@ordinateur", ordinateur);
+            command.Parameters.AddWithValue("@panier", panier);
+
+            try
+            {
+                int c = command.ExecuteNonQuery();
+                return c == 1;
+            } catch (Exception e) {
+                //Console.WriteLine(e.Message);
+                return false;
+
+            }
+
+        }
+
+        static int CreerClientParticulier(string nom, string prenom, string email, string telephone, string voie, string ville, string cp, string province)
+        {
+            int IDadresse = CreerAdresse(voie, ville, cp, province);
+            if (IDadresse < 0) return -1;
+
+            string query = "INSERT INTO client(nom, prenom, email, telephone, adresse) VALUES (@nom, @prenom, @email, @telephone, @adresse)";
+            MySqlCommand commande = connexion.CreateCommand();
+            commande.CommandText = query;
+            commande.Parameters.AddWithValue("@nom", nom);
+            commande.Parameters.AddWithValue("@prenom", prenom);
+            commande.Parameters.AddWithValue("@email", email);
+            commande.Parameters.AddWithValue("@telephone", telephone);
+            commande.Parameters.AddWithValue("@adresse", IDadresse);
+
+            try {
+                commande.ExecuteNonQuery();
+            } catch
+            {
+                return -1;
+            }
+
+            try
+            {
+                MySqlCommand command2 = connexion.CreateCommand();
+                command2.CommandText = "SELECT LAST_INSERT_ID();";
+                int result = Convert.ToInt32(command2.ExecuteScalar());
+                return result;
+            }
+            catch
+            {
+                return -1;
+            }
+
+
+        }
+
+        static int CreerClientCompagnie(string nom, string prenom, string email, string telephone, string voie, string ville, string cp, string province, string nomCompagnie, int remise)
+        {
+            int IDadresse = CreerAdresse(voie, ville, cp, province);
+            if (IDadresse < 0) return -1;
+
+            string query = "INSERT INTO compagnie(nom, remise) VALUES (@nom, @remise);";
+            MySqlCommand commande = connexion.CreateCommand();
+            commande.CommandText = query;
+
+            commande.Parameters.AddWithValue("@nom", nomCompagnie);
+            commande.Parameters.AddWithValue("@remise", remise);
+
+            try
+            {
+                int c = commande.ExecuteNonQuery();
+                if (c != 1) return -1;
+            }
+            catch
+            {
+                return -1;
+            }
+
+            int compagnieID = -1;
+            try
+            {
+                MySqlCommand command2 = connexion.CreateCommand();
+                command2.CommandText = "SELECT LAST_INSERT_ID();";
+                compagnieID = Convert.ToInt32(command2.ExecuteScalar());
+            }
+            catch
+            {
+                return -1;
+            }
+            if (compagnieID < 0) return -1;
+
+            string query2 = "INSERT INTO client(nom, prenom, email, id_compagnie, telephone, adresse) VALUES (@nom, @prenom, @email, @compagnie, @telephone, @adresse);";
+            MySqlCommand commande2 = connexion.CreateCommand();
+            commande2.CommandText = query2;
+            commande2.Parameters.AddWithValue("@nom", nom);
+            commande2.Parameters.AddWithValue("@prenom", prenom);
+            commande2.Parameters.AddWithValue("@email", email);
+            commande2.Parameters.AddWithValue("@compagnie", compagnieID);
+            commande2.Parameters.AddWithValue("@telephone", telephone);
+            commande2.Parameters.AddWithValue("@adresse", IDadresse);
+
+            try
+            {
+                int c = commande2.ExecuteNonQuery();
+                if (c != 1) return -1;
+            } catch {
+                return -1;
+            }
+
+            int clientID = -1;
+            try
+            {
+                MySqlCommand command2 = connexion.CreateCommand();
+                command2.CommandText = "SELECT LAST_INSERT_ID();";
+                clientID = Convert.ToInt32(command2.ExecuteScalar());
+                return clientID >= 0 ? clientID : -1;
+            }
+            catch
+            {
+                return -1;
+            }
+
+        }
+
+        static bool ModifierClient(int idClient, string nom = null, string prenom = null, string email = null, string telephone = null)
+        {
+
+            string query = "UPDATE client SET ";
+            List<string> parametres = new List<string>();
+            if (nom != null)
+                parametres.Add("nom = @nom");
+            if (prenom != null)
+                parametres.Add("prenom = @prenom");
+            if (email != null)
+                parametres.Add("email = @email");
+            if (telephone != null)
+                parametres.Add("telehone = @telephone");
+
+            if (parametres.Count == 0)
+            {
+                return false;
+            }
+
+            query += String.Join(", ", parametres);
+            query += " WHERE id = @id";
+
+            MySqlCommand commande = connexion.CreateCommand();
+            commande.CommandText = query;
+
+            if (nom != null)
+                commande.Parameters.AddWithValue("@nom", nom);
+            if (prenom != null)
+                commande.Parameters.AddWithValue("@prenom", prenom);
+            if (email != null)
+                commande.Parameters.AddWithValue("@email", email);
+            if (telephone != null)
+                commande.Parameters.AddWithValue("@telephone", telephone);
+
+            commande.Parameters.AddWithValue("@id", idClient);
+
+            try
+            {
+                int c = commande.ExecuteNonQuery();
+                return (c == 1);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static bool ModifierAdresseClient(int idClient, string voie, string ville, string cp, string province)
+        {
+            int idAdresse = CreerAdresse(voie, ville, cp, province);
+            if (idAdresse < 0) return false;
+
+            string query = "UPDATE CLIENT SET adresse = @adresse WHERE id_client = @id";
+            MySqlCommand commande = connexion.CreateCommand();
+            commande.CommandText = query;
+            commande.Parameters.AddWithValue("@adresse", idAdresse);
+            commande.Parameters.AddWithValue("@id", idClient);
+
+            try
+            {
+                int c = commande.ExecuteNonQuery();
+                return (c == 1);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static bool SupprimerClient(int idClient)
+        {
+            string query = "DELETE FROM client WHERE id_client = @id";
+            MySqlCommand command = connexion.CreateCommand();
+            command.CommandText = query;
+            command.Parameters.AddWithValue("@id", idClient);
+            try
+            {
+                int i = command.ExecuteNonQuery();
+                return (i == 1);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static int AdresseClient(int idClient)
+        {
+            string query = "SELECT adresse FROM client WHERE id_client = @id";
+            MySqlCommand command = connexion.CreateCommand();
+            command.CommandText = query;
+            command.Parameters.AddWithValue("@id", idClient);
+
+            try {
+                int adresse = Convert.ToInt32(command.ExecuteScalar());
+                return adresse;
+            }
+            catch(Exception e)
+            {
+                //Console.WriteLine(e.Message);
+                return -1;
+            }
+        }
+
+        static (bool, string) VerificationStocks(List<string> idPieces, List<int> quPieces)
+        {
+            // Vérifiction du stock pour chaque pièce commandée
+            string query = $"SELECT id, stock FROM `piece` WHERE id IN (\"" + String.Join("\",\"", idPieces) + "\");";
+            List<string> manque = new List<string>();
+            MySqlCommand command2 = connexion.CreateCommand();
+            command2.CommandText = query;
+            try
+            {
+                int count = 0;
+                MySqlDataReader reader = command2.ExecuteReader();
+                while (reader.Read())
+                {
+                    string id = reader.GetString(0);
+                    int stock = reader.GetInt32(1);
+                    int index = idPieces.IndexOf(id);
+                    if (quPieces[index] > stock)
+                    {
+                        for (int i = 0; i < quPieces[index] - stock; i++)
+                            manque.Add(id);
+                    }
+                    count++;
+                }
+                reader.Close();
+                if (count != idPieces.Count) return (false, "Certaines pièces n'existent pas.");
+            }
+            catch (Exception e)
+            {
+                return (false, e.Message);
+            }
+            if (manque.Count > 0)
+                return (true, String.Join(' ', manque));
+            return (true, "");
+        }
+
+        static bool AjouterAchatVelo(int idCommande, int idVelo)
+        {
+            string query = "INSERT INTO achat(id_commande, id_bicyclette) VALUES (@commande, @velo);";
+            MySqlCommand commande = connexion.CreateCommand();
+            commande.CommandText = query;
+            commande.Parameters.AddWithValue("@commande", idCommande);
+            commande.Parameters.AddWithValue("@velo", idVelo);
+            int c = 0;
+            try
+            {
+                c = commande.ExecuteNonQuery();
+                return c == 1;
+            } catch
+            {
+                return false;
+            }
+
+        }
+
+        static bool AjouterAchatPiece(int idCommande, string idPiece)
+        {
+            string query = "INSERT INTO achat(id_commande, id_piece) VALUES (@commande, @piece);";
+            MySqlCommand commande = connexion.CreateCommand();
+            commande.CommandText = query;
+            commande.Parameters.AddWithValue("@commande", idCommande);
+            commande.Parameters.AddWithValue("@piece", idPiece);
+            int c = 0;
+            try
+            {
+                c = commande.ExecuteNonQuery();
+                return c == 1;
+            }
+            catch
+            {
+                return false;
+            }
+
+        }
+
+        static List<string> GetAssemblage(int idVelo)
+        {
+            string query = "SELECT assemblage.* FROM bicyclette LEFT JOIN assemblage ON bicyclette.id_assemblage = assemblage.id WHERE bicyclette.id = @id";
+            MySqlCommand commande = connexion.CreateCommand();
+            commande.CommandText = query;
+            commande.Parameters.AddWithValue("@id", idVelo);
+            List<string> pieces = new List<string>();
+            try
+            {
+                MySqlDataReader reader = commande.ExecuteReader();
+                while (reader.Read())
+                {
+                    for(int i = 1; i <= 12; i++)
+                    {
+                        if (!reader.IsDBNull(i))
+                        {
+                            pieces.Add(reader.GetString(i));
+                        }  
+                    }
+                }
+                reader.Close();
+            } catch (Exception e)
+            {
+                //Console.WriteLine(e.Message);
+                return null;
+            }
+
+            return pieces;
+        }
+
+        static (bool, string) CreerCommande(int clientId, int[] velos, string[] pieces)
+        {
+            // Pour chaque vélo commandé, on note les pièces dont on a besoin :
+            List<string> liste = new List<string>();
+            for(int i = 0; i < velos.Length; i++)
+            {
+                List<string> assemblage = GetAssemblage(velos[i]);
+                liste.AddRange(assemblage);
+            }
+            liste.AddRange(pieces);
+
+            List<string> idPieces = new List<string>();
+            List<int> quPieces = new List<int>();
+            for (int i = 0; i < liste.Count; i++)
+            {
+                string id = liste[i];
+                // Déjà dans la liste
+                if (idPieces.IndexOf(id) >= 0)
+                {
+                    quPieces[idPieces.IndexOf(id)] += 1;
+                }
+                else
+                {
+                    idPieces.Add(id);
+                    quPieces.Add(1);
+                }
+            }
+
+            Console.WriteLine(ToString(idPieces));
+            Console.WriteLine(ToString(quPieces));
+
+            (bool, string) stock = VerificationStocks(idPieces, quPieces);
+            if (!stock.Item1 || stock.Item2.Length > 0)
+                return (false, "Pièces manquantes : " + stock.Item2);
+
+            // Si le stock est OK :
+
+            int adresseClient = AdresseClient(clientId);
+            if (adresseClient <= 0)
+                return (false, "Adresse ou client introuvable");
+
+            string req = "INSERT INTO commande(date_commande, id_client, adresse) VALUES(@date, @client, @adresse);";
+            MySqlCommand command = connexion.CreateCommand();
+            command.CommandText = req;
+            command.Parameters.AddWithValue("@date", DateTime.Now.ToString("u").Substring(0, 10));
+            command.Parameters.AddWithValue("@client", clientId);
+            command.Parameters.AddWithValue("@adresse", adresseClient);
+
+            try
+            {
+                int count = command.ExecuteNonQuery();
+                if (count != 1) return (false, "#003: Une erreur est survenue");
+            }
+            catch (Exception e)
+            {
+                return (false, "#001: " + e.Message);
+            }
+
+            // On récupère l'ID de la commande créée
+            int IDCommande = -1;
+            try
+            {
+                MySqlCommand command2 = connexion.CreateCommand();
+                command2.CommandText = "SELECT LAST_INSERT_ID();";
+                IDCommande = Convert.ToInt32(command2.ExecuteScalar());
+            }
+            catch (Exception e)
+            {
+                return (false, "#002: " + e.Message);
+            }
+
+            if (IDCommande <= 0)
+                return (false, "#004: Impossible de créer la commande");
+
+            // Maintenant on décrémente le stock de chaque pièce
+            // Et on ajoute à la commande le vélo OU la pièce
+
+            for(int i = 0; i < liste.Count; i++)
+            {
+                DecrementerStockPiece(liste[i]);
+            }
+
+            for(int i = 0; i < velos.Length; i++)
+            {
+                AjouterAchatVelo(IDCommande, velos[i]);
+            }
+
+            for(int i = 0; i < pieces.Length; i++)
+            {
+                AjouterAchatPiece(IDCommande, pieces[i]);
+            }
+
+            return (true, "");
+
+        }
+
+        static (bool, string) CreerCommandeA(int clientId, int[] bicyclettes, string[] pieces)
+        {
+            // Vérification des stocks
+            List<int> idVelos = new List<int>();
+            List<int> quVelos = new List<int>();
+            for (int i = 0; i < bicyclettes.Length; i++)
+            {
+                int id = bicyclettes[i];
+                // Déjà dans la liste
+                if(idVelos.IndexOf(id) >= 0)
+                {
+                    quVelos[idVelos.IndexOf(id)] += 1;
+                } else
+                {
+                    idVelos.Add(id);
+                    quVelos.Add(1);
+                }
+            }
+            List<string> idPieces = new List<string>();
+            List<int> quPieces = new List<int>();
+            for (int i = 0; i < pieces.Length; i++)
+            {
+                string id = pieces[i];
+                // Déjà dans la liste
+                if (idPieces.IndexOf(id) >= 0)
+                {
+                    quPieces[idPieces.IndexOf(id)] += 1;
+                }
+                else
+                {
+                    idPieces.Add(id);
+                    quPieces.Add(1);
+                }
+            }
+
+            // Vérifiction du stock pour chaque vélo commandé
+            //(bool, string) stockOK = VerificationStocks(idVelos, quVelos, idPieces, quPieces);
+            //if (stockOK.Item1 == false)
+            //    return (false, stockOK.Item2);
+
+            // On vérifie que le client existe en récupérant son adresse
+            int adresseClient = AdresseClient(clientId);
+            if (adresseClient <= 0)
+                return (false, "Adresse ou client introuvable");
+
+            string req = "INSERT INTO commande(date_commande, id_client, adresse) VALUES(@date, @client, @adresse);";
+            MySqlCommand command = connexion.CreateCommand();
+            command.CommandText = req;
+            command.Parameters.AddWithValue("@date", DateTime.Now.ToString("u").Substring(0, 10));
+            command.Parameters.AddWithValue("@client", clientId);
+            command.Parameters.AddWithValue("@adresse", adresseClient);
+
+            try
+            {
+                int count = command.ExecuteNonQuery();
+                if (count != 1) return (false, "Une erreur est survenue");
+            } catch(Exception e)
+            {
+                return (false, "#001: "+e.Message);
+            }
+
+            // On récupère l'ID de la commande créée
+            int IDCommande = -1;
+            try
+            {
+                MySqlCommand command2 = connexion.CreateCommand();
+                command2.CommandText = "SELECT LAST_INSERT_ID();";
+                IDCommande = Convert.ToInt32(command2.ExecuteScalar());
+            }
+            catch (Exception e)
+            {
+                return (false, "#002: " + e.Message);
+            }
+
+            if (IDCommande <= 0)
+                return (false, "Impossible de créer la commande");
+
+            // La commande est créée il reste à ajouter les items dans la partie achat et update les quantitées
+            for(int i = 0; i < idVelos.Count; i++)
+            {
+                for(int j = 0; j < quVelos[i]; j++)
+                {
+                    AjouterAchatVelo(IDCommande, idVelos[i]);
+                }
+            }
+            for(int i =0; i < idPieces.Count; i++)
+            {
+                for(int j = 0; j < quPieces[i]; j++)
+                {
+                    AjouterAchatPiece(IDCommande, idPieces[i]);
+                }
+            }
+
+            return (true, "Commande créée avec succès");
+
+        }
+
+        static List<int> GetVelos(int idCommande)
+        {
+            string query = "SELECT id_bicyclette FROM achat WHERE id_bicyclette IS NOT NULL AND id_commande = @commande";
+            MySqlCommand commande = connexion.CreateCommand();
+            commande.CommandText = query;
+            commande.Parameters.AddWithValue("@commande", idCommande);
+            List<int> velos = new List<int>();
+            try
+            {
+                MySqlDataReader reader = commande.ExecuteReader();
+                while (reader.Read())
+                {
+                    velos.Add(reader.GetInt32(0));
+                }
+                reader.Close();
+                return velos;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        static List<string> GetPieces(int idCommande)
+        {
+            string query = "SELECT id_piece FROM achat WHERE id_commande = @commande AND id_piece IS NOT NULL";
+            MySqlCommand commande = connexion.CreateCommand();
+            commande.CommandText = query;
+            commande.Parameters.AddWithValue("@commande", idCommande);
+            List<string> pieces = new List<string>();
+            try
+            {
+                MySqlDataReader reader = commande.ExecuteReader();
+                while (reader.Read())
+                {
+                    pieces.Add(reader.GetString(0));
+                }
+                reader.Close();
+                return pieces;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        static bool IncrementerStockPiece(string idPiece)
+        {
+            string query2 = "UPDATE piece SET stock = stock + 1 WHERE id = @piece;";
+            MySqlCommand commande2 = connexion.CreateCommand();
+            commande2.CommandText = query2;
+            commande2.Parameters.AddWithValue("@piece", idPiece);
+            int c = -1;
+            try
+            {
+                c = commande2.ExecuteNonQuery();
+                return (c == 1);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static bool DecrementerStockPiece(string idPiece)
+        {
+            string query2 = "UPDATE piece SET stock = stock - 1 WHERE id = @piece;";
+            MySqlCommand commande2 = connexion.CreateCommand();
+            commande2.CommandText = query2;
+            commande2.Parameters.AddWithValue("@piece", idPiece);
+            int c = -1;
+            try
+            {
+                c = commande2.ExecuteNonQuery();
+                return (c == 1);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static bool IncrementerStockVelo(int idVelo)
+        {
+            string query2 = "UPDATE bicyclette SET stock = stock + 1 WHERE id = @velo;";
+            MySqlCommand commande2 = connexion.CreateCommand();
+            commande2.CommandText = query2;
+            commande2.Parameters.AddWithValue("@velo", idVelo);
+            int c = -1;
+            try
+            {
+                c = commande2.ExecuteNonQuery();
+                return (c == 1);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static bool DecrementerStockVelo(int idVelo)
+        {
+            string query2 = "UPDATE bicyclette SET stock = stock - 1 WHERE id = @velo;";
+            MySqlCommand commande2 = connexion.CreateCommand();
+            commande2.CommandText = query2;
+            commande2.Parameters.AddWithValue("@velo", idVelo);
+            int c = -1;
+            try
+            {
+                c = commande2.ExecuteNonQuery();
+                return (c == 1);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        static bool SupprimerCommande(int idCommande)
+        {
+            List<int> velos = GetVelos(idCommande);
+            List<string> pieces = GetPieces(idCommande);
+            // On rétablit les stocks
+            for(int i = 0; i < velos.Count; i++)
+            {
+                IncrementerStockVelo(velos[i]);
+            }
+            for(int i = 0; i < pieces.Count; i++)
+            {
+                IncrementerStockPiece(pieces[i]);
+            }
+            // On supprime tous les achats
+
+            string query = "DELETE FROM achat WHERE id_commande = @commande";
+            MySqlCommand commande = connexion.CreateCommand();
+            commande.CommandText = query;
+            commande.Parameters.AddWithValue("@commande", idCommande);
+
+            try
+            {
+                int c = commande.ExecuteNonQuery();
+                //Console.WriteLine(c == velos.Count + pieces.Count); // this should be true every time
+            } catch
+            {
+                return false;
+            }
+
+            string query2 = "DELETE FROM commande WHERE id = @commande";
+            MySqlCommand commande2 = connexion.CreateCommand();
+            commande2.CommandText = query2;
+            commande2.Parameters.AddWithValue("@commande", idCommande);
+
+            try
+            {
+                int c = commande2.ExecuteNonQuery();
+                return (c == 1);
+            } catch
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+    }
+}
+
